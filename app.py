@@ -55,12 +55,15 @@ df = pd.DataFrame(rows)
 # --- VOR Leaderboard ---
 st.subheader("VOR Leaderboard")
 st.dataframe(
-    df.style.format({"VOR": "{:+.2f}"}).background_gradient(
-        subset=["VOR"], cmap="RdYlGn", vmin=-1, vmax=2
-    ),
+    df.style.format({"VOR": "{:+.2f}"}),
     use_container_width=True,
     hide_index=True,
     height=min(400, 35 * top_n + 38),
+    column_config={
+        "VOR": st.column_config.ProgressColumn(
+            "VOR", format="%+.2f", min_value=-2, max_value=3,
+        ),
+    },
 )
 
 # --- Metric Explorer ---
