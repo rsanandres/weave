@@ -103,103 +103,103 @@ st.dataframe(
 )
 
 # ============================================================
-# Three Graphs
+# Three Graphs — side by side
 # ============================================================
 
-# --- Graph 1: VOR Bar Chart ---
-st.subheader("Impact Scores")
 top_data = ranked[:top_n]
-vor_df = pd.DataFrame({
-    "Engineer": [e for e, _ in top_data],
-    "VOR": [s["vor"] for _, s in top_data],
-})
-vor_df["color"] = vor_df["VOR"].apply(lambda v: "positive" if v >= 0 else "negative")
+col1, col2, col3 = st.columns(3)
 
-vor_chart = (
-    alt.Chart(vor_df)
-    .mark_bar()
-    .encode(
-        y=alt.Y("Engineer:N", sort="-x", title=None),
-        x=alt.X("VOR:Q", title="Impact (VOR)"),
-        color=alt.Color(
-            "color:N",
-            scale=alt.Scale(domain=["positive", "negative"], range=["#2ecc71", "#e74c3c"]),
-            legend=None,
-        ),
-        tooltip=["Engineer", "VOR"],
+# --- Graph 1: VOR Bar Chart ---
+with col1:
+    st.subheader("Impact Scores")
+    vor_df = pd.DataFrame({
+        "Engineer": [e for e, _ in top_data],
+        "VOR": [s["vor"] for _, s in top_data],
+    })
+    vor_df["color"] = vor_df["VOR"].apply(lambda v: "positive" if v >= 0 else "negative")
+
+    vor_chart = (
+        alt.Chart(vor_df)
+        .mark_bar()
+        .encode(
+            y=alt.Y("Engineer:N", sort="-x", title=None),
+            x=alt.X("VOR:Q", title="Impact (VOR)"),
+            color=alt.Color(
+                "color:N",
+                scale=alt.Scale(domain=["positive", "negative"], range=["#2ecc71", "#e74c3c"]),
+                legend=None,
+            ),
+            tooltip=["Engineer", "VOR"],
+        )
+        .properties(height=max(250, top_n * 28))
     )
-    .properties(height=max(200, top_n * 28))
-)
-st.altair_chart(vor_chart, use_container_width=True)
+    st.altair_chart(vor_chart, use_container_width=True)
 
 # --- Graph 2: Authoring vs Reviewing Scatter ---
-st.subheader("Authoring vs. Reviewing")
-scatter_df = pd.DataFrame({
-    "Engineer": [e for e, _ in ranked],
-    "PRs Authored": [s["prs_authored"] for _, s in ranked],
-    "PRs Reviewed": [s["prs_reviewed"] for _, s in ranked],
-    "VOR": [s["vor"] for _, s in ranked],
-})
+with col2:
+    st.subheader("Authoring vs. Reviewing")
+    scatter_df = pd.DataFrame({
+        "Engineer": [e for e, _ in ranked],
+        "PRs Authored": [s["prs_authored"] for _, s in ranked],
+        "PRs Reviewed": [s["prs_reviewed"] for _, s in ranked],
+        "VOR": [s["vor"] for _, s in ranked],
+    })
 
-scatter = (
-    alt.Chart(scatter_df)
-    .mark_circle(size=60)
-    .encode(
-        x=alt.X("PRs Authored:Q"),
-        y=alt.Y("PRs Reviewed:Q"),
-        tooltip=["Engineer", "PRs Authored", "PRs Reviewed", "VOR"],
-        color=alt.Color("VOR:Q", scale=alt.Scale(scheme="redyellowgreen"), title="VOR"),
+    scatter = (
+        alt.Chart(scatter_df)
+        .mark_circle(size=60)
+        .encode(
+            x=alt.X("PRs Authored:Q"),
+            y=alt.Y("PRs Reviewed:Q"),
+            tooltip=["Engineer", "PRs Authored", "PRs Reviewed", "VOR"],
+            color=alt.Color("VOR:Q", scale=alt.Scale(scheme="redyellowgreen"), legend=None),
+        )
+        .properties(height=max(250, top_n * 28))
+        .interactive()
     )
-    .properties(height=350)
-    .interactive()
-)
 
-# Add text labels for top N
-label_df = scatter_df.head(top_n)
-labels = (
-    alt.Chart(label_df)
-    .mark_text(align="left", dx=7, fontSize=11)
-    .encode(
-        x="PRs Authored:Q",
-        y="PRs Reviewed:Q",
-        text="Engineer:N",
+    label_df = scatter_df.head(min(top_n, 5))
+    labels = (
+        alt.Chart(label_df)
+        .mark_text(align="left", dx=7, fontSize=10)
+        .encode(
+            x="PRs Authored:Q",
+            y="PRs Reviewed:Q",
+            text="Engineer:N",
+        )
     )
-)
 
-st.altair_chart(scatter + labels, use_container_width=True)
+    st.altair_chart(scatter + labels, use_container_width=True)
 
 # --- Graph 3: Areas Touched Heatmap ---
-st.subheader("Area Coverage")
-top_engineers = [e for e, _ in ranked[:top_n]]
-top_dirs, eng_dir_counts = compute_area_matrix(data, set(stats.keys()), top_n_areas=12)
+with col3:
+    st.subheader("Area Coverage")
+    top_engineers = [e for e, _ in ranked[:top_n]]
+    top_dirs, eng_dir_counts = compute_area_matrix(data, set(stats.keys()), top_n_areas=10)
 
-heat_rows = []
-for eng in top_engineers:
-    for d in top_dirs:
-        heat_rows.append({
-            "Engineer": eng,
-            "Directory": d,
-            "PRs": eng_dir_counts[eng].get(d, 0),
-        })
+    heat_rows = []
+    for eng in top_engineers:
+        for d in top_dirs:
+            heat_rows.append({
+                "Engineer": eng,
+                "Directory": d,
+                "PRs": eng_dir_counts[eng].get(d, 0),
+            })
 
-heat_df = pd.DataFrame(heat_rows)
+    heat_df = pd.DataFrame(heat_rows)
 
-heatmap = (
-    alt.Chart(heat_df)
-    .mark_rect()
-    .encode(
-        x=alt.X("Directory:N", title=None, axis=alt.Axis(labelAngle=-45)),
-        y=alt.Y("Engineer:N", sort=top_engineers, title=None),
-        color=alt.Color(
-            "PRs:Q",
-            scale=alt.Scale(scheme="blues"),
-            title="PRs",
-        ),
-        tooltip=["Engineer", "Directory", "PRs"],
+    heatmap = (
+        alt.Chart(heat_df)
+        .mark_rect()
+        .encode(
+            x=alt.X("Directory:N", title=None, axis=alt.Axis(labelAngle=-45)),
+            y=alt.Y("Engineer:N", sort=top_engineers, title=None),
+            color=alt.Color("PRs:Q", scale=alt.Scale(scheme="blues"), title="PRs"),
+            tooltip=["Engineer", "Directory", "PRs"],
+        )
+        .properties(height=max(250, top_n * 28))
     )
-    .properties(height=max(200, top_n * 28))
-)
-st.altair_chart(heatmap, use_container_width=True)
+    st.altair_chart(heatmap, use_container_width=True)
 
 # ============================================================
 # Metric Explorer — in expander
