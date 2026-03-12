@@ -151,33 +151,43 @@ with col1:
 
     st.altair_chart(scatter + labels, use_container_width=True)
 
-# --- Impact Score Bar Chart ---
+# --- Impact Breakdown Stacked Bar ---
 with col2:
-    st.subheader("Impact Scores")
-    breakdown_n = min(top_n, 10)
+    st.subheader("Impact Breakdown")
+    breakdown_n = min(top_n, 5)
     top_engineers = [e for e, _ in ranked[:breakdown_n]]
 
-    impact_df = pd.DataFrame({
-        "Engineer": top_engineers,
-        "Impact Score": [stats[e]["impact_score"] for e in top_engineers],
-    })
+    breakdown_rows = []
+    for eng in top_engineers:
+        z = stats[eng]["z_scores"]
+        impact = stats[eng]["impact_score"]
+        for metric_key, weight in WEIGHTS.items():
+            # Scale contribution proportionally to impact score
+            raw_contrib = z.get(metric_key, 0) * weight
+            breakdown_rows.append({
+                "Engineer": eng,
+                "Component": WEIGHT_LABELS.get(metric_key, metric_key),
+                "Contribution": round(max(raw_contrib, 0) * (impact / max(stats[eng]["vor"], 0.01)), 1),
+            })
 
-    impact_chart = (
-        alt.Chart(impact_df)
+    bd_df = pd.DataFrame(breakdown_rows)
+
+    breakdown_chart = (
+        alt.Chart(bd_df)
         .mark_bar()
         .encode(
             y=alt.Y("Engineer:N", sort=top_engineers, title=None),
-            x=alt.X("Impact Score:Q", scale=alt.Scale(domain=[0, 100])),
+            x=alt.X("Contribution:Q", title="Impact Score Contribution", stack="zero"),
             color=alt.Color(
-                "Impact Score:Q",
-                scale=alt.Scale(scheme="redyellowgreen", domain=[30, 100]),
-                legend=None,
+                "Component:N",
+                scale=alt.Scale(scheme="tableau10"),
+                legend=alt.Legend(orient="bottom", columns=4, title=None),
             ),
-            tooltip=["Engineer", "Impact Score"],
+            tooltip=["Engineer", "Component", alt.Tooltip("Contribution:Q", format=".1f")],
         )
         .properties(height=380)
     )
-    st.altair_chart(impact_chart, use_container_width=True)
+    st.altair_chart(breakdown_chart, use_container_width=True)
 
 # ============================================================
 # Metric Explorer — in expander
