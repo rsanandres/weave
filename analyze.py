@@ -67,7 +67,7 @@ def compute_stats(data):
 
     # Per-engineer accumulators
     authored = defaultdict(list)
-    reviewed = defaultdict(lambda: {"count": 0, "comments": 0, "turnarounds": []})
+    reviewed = defaultdict(lambda: {"count": 0, "comments": 0, "turnarounds": [], "authors_reviewed": set()})
 
     for pr in prs:
         author = pr["author"]
@@ -86,6 +86,7 @@ def compute_stats(data):
             seen_reviewers.add(reviewer)
             reviewed[reviewer]["count"] += 1
             reviewed[reviewer]["comments"] += review["commentCount"]
+            reviewed[reviewer]["authors_reviewed"].add(author)
 
             # Review turnaround
             if review["submittedAt"] and pr["createdAt"]:
@@ -101,7 +102,7 @@ def compute_stats(data):
 
     for eng in all_engineers:
         eng_prs = authored.get(eng, [])
-        eng_reviews = reviewed.get(eng, {"count": 0, "comments": 0, "turnarounds": []})
+        eng_reviews = reviewed.get(eng, {"count": 0, "comments": 0, "turnarounds": [], "authors_reviewed": set()})
 
         if len(eng_prs) < MIN_PRS:
             continue
@@ -151,6 +152,7 @@ def compute_stats(data):
             "prs_authored": len(eng_prs),
             "prs_reviewed": eng_reviews["count"],
             "review_comments": eng_reviews["comments"],
+            "unique_authors_reviewed": len(eng_reviews["authors_reviewed"]),
             "avg_review_turnaround_hours": round(avg_turnaround, 1) if avg_turnaround else None,
             "avg_cycle_time": round(avg_cycle, 1) if avg_cycle else None,
             "areas_touched": len(areas),

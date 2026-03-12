@@ -15,7 +15,7 @@ from analyze import (
 st.set_page_config(page_title="PostHog Engineering Impact", layout="wide")
 
 
-_CACHE_VERSION = 2  # bump to bust Streamlit Cloud cache
+_CACHE_VERSION = 3  # bump to bust Streamlit Cloud cache
 
 
 @st.cache_data(ttl=3600)
@@ -115,20 +115,23 @@ with col_lb:
 # --- Authoring vs Reviewing Scatter ---
 with col1:
     st.subheader("Authoring vs. Reviewing")
+    st.caption("Bubble size = unique teammates unblocked via reviews")
     scatter_df = pd.DataFrame({
         "Engineer": [e for e, _ in ranked],
         "PRs Authored": [s["prs_authored"] for _, s in ranked],
         "PRs Reviewed": [s["prs_reviewed"] for _, s in ranked],
+        "Unblock Breadth": [s["unique_authors_reviewed"] for _, s in ranked],
         "Impact": [s["impact_score"] for _, s in ranked],
     })
 
     scatter = (
         alt.Chart(scatter_df)
-        .mark_circle(size=60)
+        .mark_circle()
         .encode(
             x=alt.X("PRs Authored:Q"),
             y=alt.Y("PRs Reviewed:Q"),
-            tooltip=["Engineer", "PRs Authored", "PRs Reviewed", "Impact"],
+            size=alt.Size("Unblock Breadth:Q", scale=alt.Scale(range=[30, 400]), legend=None),
+            tooltip=["Engineer", "PRs Authored", "PRs Reviewed", "Unblock Breadth", "Impact"],
             color=alt.Color("Impact:Q", scale=alt.Scale(scheme="redyellowgreen"), legend=None),
         )
         .properties(height=380)
