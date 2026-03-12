@@ -103,40 +103,13 @@ st.dataframe(
 )
 
 # ============================================================
-# Three Graphs — side by side
+# Charts — side by side
 # ============================================================
 
-top_data = ranked[:top_n]
-col1, col2, col3 = st.columns(3)
+col1, col2 = st.columns(2)
 
-# --- Graph 1: VOR Bar Chart ---
+# --- Authoring vs Reviewing Scatter ---
 with col1:
-    st.subheader("Impact Scores")
-    vor_df = pd.DataFrame({
-        "Engineer": [e for e, _ in top_data],
-        "VOR": [s["vor"] for _, s in top_data],
-    })
-    vor_df["color"] = vor_df["VOR"].apply(lambda v: "positive" if v >= 0 else "negative")
-
-    vor_chart = (
-        alt.Chart(vor_df)
-        .mark_bar()
-        .encode(
-            y=alt.Y("Engineer:N", sort="-x", title=None),
-            x=alt.X("VOR:Q", title="Impact (VOR)"),
-            color=alt.Color(
-                "color:N",
-                scale=alt.Scale(domain=["positive", "negative"], range=["#2ecc71", "#e74c3c"]),
-                legend=None,
-            ),
-            tooltip=["Engineer", "VOR"],
-        )
-        .properties(height=max(250, top_n * 28))
-    )
-    st.altair_chart(vor_chart, use_container_width=True)
-
-# --- Graph 2: Authoring vs Reviewing Scatter ---
-with col2:
     st.subheader("Authoring vs. Reviewing")
     scatter_df = pd.DataFrame({
         "Engineer": [e for e, _ in ranked],
@@ -172,7 +145,7 @@ with col2:
     st.altair_chart(scatter + labels, use_container_width=True)
 
 # --- Graph 3: Areas Touched Heatmap ---
-with col3:
+with col2:
     st.subheader("Area Coverage")
     top_engineers = [e for e, _ in ranked[:top_n]]
     top_dirs, eng_dir_counts = compute_area_matrix(data, set(stats.keys()), top_n_areas=10)
