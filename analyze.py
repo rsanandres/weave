@@ -14,16 +14,40 @@ load_dotenv()
 MIN_PRS = 3
 
 # VOR weights — bug_fixes/feature_prs dropped because PostHog barely labels PRs.
-# Replaced with avg_review_turnaround (inverted: lower = better = higher z-score).
+# avg_cycle_time (inverted: faster merge = higher score) replaces them.
 WEIGHTS = {
     "prs_authored": 0.20,
     "prs_reviewed": 0.20,
     "review_comments": 0.10,
     "areas_touched": 0.15,
-    "review_turnaround_inv": 0.10,
+    "avg_cycle_time": 0.10,
     "net_lines_dampened": 0.10,
     "large_prs": 0.15,
 }
+
+# Human-readable labels for VOR weight components
+WEIGHT_LABELS = {
+    "prs_authored": "PRs Authored",
+    "prs_reviewed": "PRs Reviewed",
+    "review_comments": "Review Comments",
+    "areas_touched": "Areas Touched",
+    "avg_cycle_time": "Cycle Time",
+    "net_lines_dampened": "Net Lines",
+    "large_prs": "Large PRs",
+}
+
+
+def scale_vor(vor, spread=1.5):
+    """Sigmoid scaling: maps VOR to 0-100, centered at 50 (median)."""
+    return round(100 / (1 + math.exp(-vor * spread)), 1)
+
+
+def format_cycle_time(hours):
+    if hours is None:
+        return "\u2014"
+    if hours < 48:
+        return f"{hours:.1f}h"
+    return f"{hours / 24:.1f}d"
 
 
 def classify_pr_size(additions, deletions):
@@ -112,11 +136,23 @@ def compute_stats(data):
         turnarounds = eng_reviews["turnarounds"]
         avg_turnaround = sum(turnarounds) / len(turnarounds) if turnarounds else None
 
+        # PR cycle time: creation to merge
+        cycle_times = []
+        for pr in eng_prs:
+            if pr["createdAt"] and pr["mergedAt"]:
+                created = datetime.fromisoformat(pr["createdAt"].replace("Z", "+00:00"))
+                merged = datetime.fromisoformat(pr["mergedAt"].replace("Z", "+00:00"))
+                cycle_hours = (merged - created).total_seconds() / 3600
+                if cycle_hours >= 0:
+                    cycle_times.append(cycle_hours)
+        avg_cycle = sum(cycle_times) / len(cycle_times) if cycle_times else None
+
         stats[eng] = {
             "prs_authored": len(eng_prs),
             "prs_reviewed": eng_reviews["count"],
             "review_comments": eng_reviews["comments"],
             "avg_review_turnaround_hours": round(avg_turnaround, 1) if avg_turnaround else None,
+            "avg_cycle_time": round(avg_cycle, 1) if avg_cycle else None,
             "areas_touched": len(areas),
             "area_list": sorted(areas),
             "bug_fixes": bug_fixes,
@@ -146,20 +182,11 @@ def compute_vor(stats):
     for m in metrics:
         if m == "net_lines_dampened":
             raw[m] = [log_dampen(stats[e]["net_lines"]) for e in engineers]
-        elif m == "review_turnaround_inv":
-            # Invert turnaround: lower hours = better. Use negative so higher z = faster.
-            # Engineers with no reviews get median (0 z-score) via fallback.
-            median_ta = statistics.median([
-                stats[e]["avg_review_turnaround_hours"]
-                for e in engineers
-                if stats[e]["avg_review_turnaround_hours"] is not None
-            ]) if any(stats[e]["avg_review_turnaround_hours"] is not None for e in engineers) else 0
-            raw[m] = [
-                -(stats[e]["avg_review_turnaround_hours"])
-                if stats[e]["avg_review_turnaround_hours"] is not None
-                else -median_ta
-                for e in engineers
-            ]
+        elif m == "avg_cycle_time":
+            # Invert: lower cycle time = better. Handle None as median.
+            valid = [stats[e]["avg_cycle_time"] for e in engineers if stats[e]["avg_cycle_time"] is not None]
+            median_ct = statistics.median(valid) if valid else 0
+            raw[m] = [-(stats[e]["avg_cycle_time"] or median_ct) for e in engineers]
         else:
             raw[m] = [stats[e][m] for e in engineers]
 
@@ -180,6 +207,7 @@ def compute_vor(stats):
             vor += WEIGHTS[m] * z
 
         stats[eng]["vor"] = round(vor, 2)
+        stats[eng]["impact_score"] = scale_vor(vor)
         stats[eng]["z_scores"] = z_scores
 
     return stats
@@ -192,7 +220,7 @@ def classify_ceiling_floor(stats):
     # Ceiling composite: ambitious, broad contributions
     ceiling_keys = ["large_prs", "net_lines_dampened", "areas_touched"]
     # Floor composite: team enablement and review quality
-    floor_keys = ["prs_reviewed", "review_comments", "review_turnaround_inv"]
+    floor_keys = ["prs_reviewed", "review_comments", "avg_cycle_time"]
 
     for eng in engineers:
         z = stats[eng]["z_scores"]

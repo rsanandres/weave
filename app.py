@@ -5,9 +5,11 @@ import pandas as pd
 import streamlit as st
 
 from analyze import (
-    compute_area_matrix,
+    format_cycle_time,
     generate_llm_summary,
     load_and_analyze,
+    WEIGHTS,
+    WEIGHT_LABELS,
 )
 
 st.set_page_config(page_title="PostHog Engineering Impact", layout="wide")
@@ -51,9 +53,9 @@ ranked = sorted(stats.items(), key=lambda x: x[1]["vor"], reverse=True)
 def _type_icons(type_str):
     icons = ""
     if "Ceiling" in type_str:
-        icons += "\u25b2"  # ▲
+        icons += "\u25c6"  # ◆ Builder
     if "Floor" in type_str:
-        icons += "\u25bc"  # ▼
+        icons += "\u25cf"  # ● Enabler
     return icons
 
 
@@ -63,11 +65,12 @@ def _type_icons(type_str):
 
 col_lb, col1, col2 = st.columns([1, 1, 1])
 
+# --- VOR Leaderboard ---
 with col_lb:
-    st.subheader("VOR Leaderboard")
+    st.subheader("Impact Leaderboard")
     st.caption(
-        "0 = median, positive = above. "
-        "▲ Ceiling Raiser · ▼ Floor Raiser"
+        "50 = median, higher = more impact. "
+        "◆ Builder · ● Enabler"
     )
 
     lb_rows = []
@@ -77,7 +80,7 @@ with col_lb:
         lb_rows.append({
             "Rank": rank,
             "Engineer": label,
-            "Impact (VOR)": s["vor"],
+            "Impact Score": s["impact_score"],
         })
 
     lb_df = pd.DataFrame(lb_rows)
@@ -86,21 +89,21 @@ with col_lb:
         lb_df,
         use_container_width=True,
         hide_index=True,
-        height=min(400, 35 * top_n + 38),
+        height=min(420, 35 * top_n + 40),
         column_config={
             "Rank": st.column_config.NumberColumn(
-                "Rank", help="Ranked by Impact (VOR) score"
+                "Rank", help="Ranked by Impact Score", width="small"
             ),
             "Engineer": st.column_config.TextColumn(
                 "Engineer",
-                help="GitHub username. ▲ = ceiling raiser (pushes product forward). ▼ = floor raiser (maintains quality).",
+                help="GitHub username. ◆ = Builder (pushes product forward). ● = Enabler (maintains quality & unblocks team).",
             ),
-            "Impact (VOR)": st.column_config.ProgressColumn(
-                "Impact (VOR)",
-                help="Weighted z-score across authoring, reviewing, breadth, and complexity. 0 = median contributor.",
-                format="%.2f",
-                min_value=-2,
-                max_value=3,
+            "Impact Score": st.column_config.ProgressColumn(
+                "Impact Score",
+                help="Sigmoid-scaled VOR. 50 = median contributor, 70+ = strong, 85+ = standout.",
+                min_value=0,
+                max_value=100,
+                format="%0.0f",
             ),
         },
     )
@@ -112,7 +115,7 @@ with col1:
         "Engineer": [e for e, _ in ranked],
         "PRs Authored": [s["prs_authored"] for _, s in ranked],
         "PRs Reviewed": [s["prs_reviewed"] for _, s in ranked],
-        "VOR": [s["vor"] for _, s in ranked],
+        "Impact": [s["impact_score"] for _, s in ranked],
     })
 
     scatter = (
@@ -121,10 +124,10 @@ with col1:
         .encode(
             x=alt.X("PRs Authored:Q"),
             y=alt.Y("PRs Reviewed:Q"),
-            tooltip=["Engineer", "PRs Authored", "PRs Reviewed", "VOR"],
-            color=alt.Color("VOR:Q", scale=alt.Scale(scheme="redyellowgreen"), legend=None),
+            tooltip=["Engineer", "PRs Authored", "PRs Reviewed", "Impact"],
+            color=alt.Color("Impact:Q", scale=alt.Scale(scheme="redyellowgreen"), legend=None),
         )
-        .properties(height=max(250, top_n * 28))
+        .properties(height=max(300, top_n * 28))
         .interactive()
     )
 
@@ -141,35 +144,40 @@ with col1:
 
     st.altair_chart(scatter + labels, use_container_width=True)
 
-# --- Graph 3: Areas Touched Heatmap ---
+# --- VOR Breakdown Chart ---
 with col2:
-    st.subheader("Area Coverage")
+    st.subheader("Score Breakdown")
     top_engineers = [e for e, _ in ranked[:top_n]]
-    top_dirs, eng_dir_counts = compute_area_matrix(data, set(stats.keys()), top_n_areas=10)
 
-    heat_rows = []
+    breakdown_rows = []
     for eng in top_engineers:
-        for d in top_dirs:
-            heat_rows.append({
+        z = stats[eng]["z_scores"]
+        for metric_key, weight in WEIGHTS.items():
+            contribution = z.get(metric_key, 0) * weight
+            breakdown_rows.append({
                 "Engineer": eng,
-                "Directory": d,
-                "PRs": eng_dir_counts[eng].get(d, 0),
+                "Component": WEIGHT_LABELS.get(metric_key, metric_key),
+                "Contribution": round(contribution, 3),
             })
 
-    heat_df = pd.DataFrame(heat_rows)
+    bd_df = pd.DataFrame(breakdown_rows)
 
-    heatmap = (
-        alt.Chart(heat_df)
-        .mark_rect()
+    breakdown_chart = (
+        alt.Chart(bd_df)
+        .mark_bar()
         .encode(
-            x=alt.X("Directory:N", title=None, axis=alt.Axis(labelAngle=-45)),
             y=alt.Y("Engineer:N", sort=top_engineers, title=None),
-            color=alt.Color("PRs:Q", scale=alt.Scale(scheme="blues"), title="PRs"),
-            tooltip=["Engineer", "Directory", "PRs"],
+            x=alt.X("Contribution:Q", title="VOR Contribution", stack="zero"),
+            color=alt.Color(
+                "Component:N",
+                scale=alt.Scale(scheme="tableau10"),
+                legend=alt.Legend(orient="bottom", columns=4, title=None),
+            ),
+            tooltip=["Engineer", "Component", "Contribution"],
         )
-        .properties(height=max(250, top_n * 28))
+        .properties(height=max(300, top_n * 28))
     )
-    st.altair_chart(heatmap, use_container_width=True)
+    st.altair_chart(breakdown_chart, use_container_width=True)
 
 # ============================================================
 # Metric Explorer — in expander
@@ -182,16 +190,19 @@ with st.expander("Metric Explorer"):
         "Large PRs (L+XL)": "large_prs",
         "Areas Touched": "areas_touched",
         "Net Lines": "net_lines",
-        "Avg Review Turnaround (hrs)": "avg_review_turnaround_hours",
+        "Avg Cycle Time (hrs)": "avg_cycle_time",
     }
 
     selected_label = st.selectbox("Select metric", list(metric_options.keys()))
     selected_metric = metric_options[selected_label]
 
+    lower_is_better = {"avg_cycle_time"}
+    reverse = selected_metric not in lower_is_better
+
     metric_ranked = sorted(
         stats.items(),
         key=lambda x: x[1].get(selected_metric, 0) or 0,
-        reverse=True,
+        reverse=reverse,
     )[:top_n]
     chart_df = pd.DataFrame({
         "Engineer": [e for e, _ in metric_ranked],
@@ -206,12 +217,13 @@ with st.expander("Full Stats Table"):
     for eng, s in ranked:
         all_rows.append({
             "Engineer": eng,
-            "Impact (VOR)": s["vor"],
+            "Impact Score": s["impact_score"],
             "Type": s["type"],
             "PRs Authored": s["prs_authored"],
             "PRs Reviewed": s["prs_reviewed"],
             "Review Comments": s["review_comments"],
-            "Avg Review Turnaround (hrs)": s["avg_review_turnaround_hours"] or "—",
+            "Avg Cycle Time": format_cycle_time(s["avg_cycle_time"]),
+            "Avg Review Turnaround": format_cycle_time(s["avg_review_turnaround_hours"]),
             "Large PRs": s["large_prs"],
             "Areas Touched": s["areas_touched"],
             "Net Lines": s["net_lines"],
@@ -225,11 +237,11 @@ with st.expander("Full Stats Table"):
 # --- Methodology ---
 with st.expander("Methodology"):
     st.markdown("""
-### Value Over Replacement (VOR)
+### Impact Score (VOR)
 
-VOR measures how much an engineer exceeds the typical (median) contributor across multiple dimensions of impact. A VOR of 0 means median performance; positive values indicate above-replacement impact.
+The Impact Score measures how much an engineer exceeds the typical (median) contributor across multiple dimensions. Raw VOR z-scores are passed through a sigmoid function to produce a 0-100 scale: **50 = median, 70+ = strong, 85+ = standout**.
 
-**Formula:** For each metric, we compute a z-score: `z = (value - median) / stddev`. The final VOR is a weighted sum of these z-scores:
+**Formula:** For each metric, we compute a z-score: `z = (value - median) / stddev`. The final VOR is a weighted sum of these z-scores, then scaled: `score = 100 / (1 + e^(-VOR * 1.5))`.
 
 | Metric | Weight | Rationale |
 |--------|--------|-----------|
@@ -237,25 +249,26 @@ VOR measures how much an engineer exceeds the typical (median) contributor acros
 | PRs Reviewed | 0.20 | Team multiplier — unblocking others |
 | Review Comments | 0.10 | Depth of review engagement |
 | Areas Touched | 0.15 | Cross-cutting breadth of contribution |
-| Review Turnaround (inv) | 0.10 | Speed of first review — faster = higher score |
+| Cycle Time (inv) | 0.10 | PR creation to merge — faster = higher score |
 | Net Lines (dampened) | 0.10 | Scale of change, log-dampened to avoid rewarding bloat |
 | Large PRs (L+XL) | 0.15 | Willingness to tackle substantial changes |
 
-*Note: Bug fixes and feature PRs were initially planned as metrics but dropped because PostHog uses very few PR labels (<10% of PRs), making label-based signals unreliable. Review turnaround replaced bug fixes as a more data-rich measure of team enablement.*
-
-**Log dampening** on net lines: `sign(x) * log(1 + |x|)` — prevents an engineer who adds 50K lines from dominating the score. The signal is "do they make meaningful-sized changes?" not "who wrote the most code."
+**Log dampening** on net lines: `sign(x) * log(1 + |x|)` — prevents an engineer who adds 50K lines from dominating the score.
 
 ### PR Size Tiers
-- **S**: < 50 lines changed
-- **M**: 50–249 lines
-- **L**: 250–999 lines
-- **XL**: 1000+ lines
+- **S**: < 50 lines changed · **M**: 50-249 · **L**: 250-999 · **XL**: 1000+
 
-### Ceiling Raiser vs. Floor Raiser
+### Builder vs. Enabler
 
-- **Ceiling Raiser ▲** (top 20th percentile): High z-scores in large PRs, net lines, and areas touched. These engineers push the product forward with ambitious, broad contributions.
-- **Floor Raiser ▼** (top 20th percentile): High z-scores in PRs reviewed, review comments, and review turnaround speed. These engineers keep quality high and unblock the team.
+- **Builder ◆** (top 20th percentile): High z-scores in large PRs, net lines, and areas touched. Pushes the product forward with ambitious, broad contributions.
+- **Enabler ●** (top 20th percentile): High z-scores in PRs reviewed, review comments, and cycle time. Keeps quality high and unblocks the team.
 - Engineers can be both, neither, or one.
+
+### Known Limitations
+- **Label-dependent metrics removed**: PostHog labels <10% of PRs, so bug fix and feature PR counts were excluded from scoring as unreliable signals.
+- **90-day window**: Does not account for vacations, on-call rotations, or parental leave.
+- **File truncation**: GitHub API returns max 50 files per PR. Large PRs with 100+ files may have undercounted area coverage.
+- **Review turnaround**: Measured from PR creation to first review, not from when review was requested. Displayed for context but not included in Impact Score.
 
 ### Qualification
 Engineers must have authored ≥3 merged PRs in the period to qualify. Bot accounts are excluded.
