@@ -140,11 +140,11 @@ def fetch_all_prs():
         "Content-Type": "application/json",
     }
 
-    # Split into 30-day chunks to stay under 1000-result search limit
+    # Split into 15-day chunks to stay well under 1000-result search limit
     chunks = []
     chunk_start = since_date
     while chunk_start < now:
-        chunk_end = min(chunk_start + timedelta(days=30), now)
+        chunk_end = min(chunk_start + timedelta(days=15), now)
         chunks.append((chunk_start.strftime("%Y-%m-%d"), chunk_end.strftime("%Y-%m-%d")))
         chunk_start = chunk_end + timedelta(days=1)
 

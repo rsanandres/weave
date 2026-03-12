@@ -73,7 +73,8 @@ with col_lb:
     st.subheader("Impact Leaderboard")
     st.caption(
         "50 = median, higher = more impact. "
-        "◆ Builder · ● Enabler"
+        "◆ Builder (large PRs, broad areas, net code output) · "
+        "● Enabler (reviews, comments, fast cycle time)"
     )
 
     lb_rows = []
@@ -99,7 +100,7 @@ with col_lb:
             ),
             "Engineer": st.column_config.TextColumn(
                 "Engineer",
-                help="GitHub username. ◆ = Builder (pushes product forward). ● = Enabler (maintains quality & unblocks team).",
+                help="◆ Builder = top 20% in large PRs, areas touched, net lines. ● Enabler = top 20% in reviews, comments, cycle time.",
             ),
             "Impact Score": st.column_config.ProgressColumn(
                 "Impact Score",
@@ -130,7 +131,7 @@ with col1:
             tooltip=["Engineer", "PRs Authored", "PRs Reviewed", "Impact"],
             color=alt.Color("Impact:Q", scale=alt.Scale(scheme="redyellowgreen"), legend=None),
         )
-        .properties(height=max(300, top_n * 28))
+        .properties(height=380)
         .interactive()
     )
 
@@ -178,7 +179,7 @@ with col2:
             ),
             tooltip=["Engineer", "Component", "Contribution"],
         )
-        .properties(height=max(300, top_n * 28))
+        .properties(height=380)
     )
     st.altair_chart(breakdown_chart, use_container_width=True)
 
