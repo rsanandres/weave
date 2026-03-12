@@ -151,7 +151,8 @@ with col1:
 # --- VOR Breakdown Chart ---
 with col2:
     st.subheader("Score Breakdown")
-    top_engineers = [e for e, _ in ranked[:top_n]]
+    breakdown_n = min(top_n, 5)
+    top_engineers = [e for e, _ in ranked[:breakdown_n]]
 
     breakdown_rows = []
     for eng in top_engineers:

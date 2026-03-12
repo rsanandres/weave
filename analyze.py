@@ -267,9 +267,9 @@ def generate_llm_summary(stats, cache_path="data/llm_summary.txt"):
     # Top 5 by VOR
     ranked = sorted(stats.items(), key=lambda x: x[1]["vor"], reverse=True)[:5]
     profile = "\n".join(
-        f"- {eng}: VOR={s['vor']}, PRs={s['prs_authored']}, Reviews={s['prs_reviewed']}, "
-        f"Areas={s['areas_touched']}, Large PRs={s['large_prs']}, "
-        f"Avg Review Turnaround={s['avg_review_turnaround_hours']}h, Type={s['type']}"
+        f"- {eng}: Impact Score={s['impact_score']}/100, PRs={s['prs_authored']}, "
+        f"Reviews={s['prs_reviewed']}, Areas={s['areas_touched']}, Large PRs={s['large_prs']}, "
+        f"Avg Cycle Time={format_cycle_time(s['avg_cycle_time'])}"
         for eng, s in ranked
     )
 
@@ -282,12 +282,12 @@ def generate_llm_summary(stats, cache_path="data/llm_summary.txt"):
                 "role": "user",
                 "content": (
                     f"You're analyzing engineering impact at PostHog over the last 90 days. "
-                    f"Here are the top 5 engineers by Value Over Replacement (VOR) score:\n\n"
+                    f"Here are the top 5 engineers by Impact Score (0-100 scale, 50 = median):\n\n"
                     f"{profile}\n\n"
-                    f"Write 2-3 sentences summarizing who stands out and why. Be specific about "
-                    f"what makes each person impactful. Don't use superlatives — use the numbers.\n\n"
-                    f'Example tone: "X authored 47 PRs across 8 areas, suggesting a generalist role, '
-                    f"while Y's 92 reviews and 4-hour median turnaround made them the team's primary unlocker.\""
+                    f"Write 2-3 sentences summarizing who stands out and why. Reference Impact Scores "
+                    f"and specific numbers. Don't use superlatives.\n\n"
+                    f'Example tone: "X scored 95 with 47 PRs across 8 areas, suggesting a generalist role, '
+                    f"while Y's 92 reviews and 13h cycle time made them the team's primary unlocker.\""
                 ),
             }],
         )
