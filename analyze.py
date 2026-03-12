@@ -274,6 +274,31 @@ def generate_llm_summary(stats, cache_path="data/llm_summary.txt"):
     return summary
 
 
+def compute_area_matrix(data, engineers, top_n_areas=15):
+    """Build engineer x directory matrix of PR counts for top directories."""
+    from collections import Counter
+
+    # Count total PRs per top-level directory across all engineers
+    dir_counts = Counter()
+    eng_dir_counts = defaultdict(Counter)
+
+    for pr in data["prs"]:
+        author = pr["author"]
+        if author not in engineers:
+            continue
+        dirs_in_pr = set()
+        for f in pr["files"]:
+            parts = f.split("/")
+            if parts and not parts[0].startswith("."):
+                dirs_in_pr.add(parts[0])
+        for d in dirs_in_pr:
+            dir_counts[d] += 1
+            eng_dir_counts[author][d] += 1
+
+    top_dirs = [d for d, _ in dir_counts.most_common(top_n_areas)]
+    return top_dirs, eng_dir_counts
+
+
 def load_and_analyze(data_path="data/posthog_data.json"):
     """Full pipeline: load data, compute stats, VOR, classifications."""
     with open(data_path) as f:
