@@ -39,14 +39,14 @@ for rank, (eng, s) in enumerate(ranked[:top_n], 1):
     rows.append({
         "Rank": rank,
         "Engineer": eng,
-        "VOR": s["vor"],
+        "Impact (VOR)": s["vor"],
         "Type": s["type"],
         "PRs Authored": s["prs_authored"],
         "PRs Reviewed": s["prs_reviewed"],
-        "Bug Fixes": s["bug_fixes"],
         "Large PRs": s["large_prs"],
         "Areas": s["areas_touched"],
         "Review Comments": s["review_comments"],
+        "Avg Turnaround (hrs)": s["avg_review_turnaround_hours"] or "—",
         "Net Lines": s["net_lines"],
     })
 
@@ -54,14 +54,15 @@ df = pd.DataFrame(rows)
 
 # --- VOR Leaderboard ---
 st.subheader("VOR Leaderboard")
+st.caption("Value Over Replacement — how much each engineer exceeds the median contributor. 0 = median, positive = above.")
 st.dataframe(
-    df.style.format({"VOR": "{:+.2f}"}),
+    df,
     use_container_width=True,
     hide_index=True,
     height=min(400, 35 * top_n + 38),
     column_config={
-        "VOR": st.column_config.ProgressColumn(
-            "VOR", format="%+.2f", min_value=-2, max_value=3,
+        "Impact (VOR)": st.column_config.ProgressColumn(
+            "Impact (VOR)", format="%.2f", min_value=-2, max_value=3,
         ),
     },
 )
@@ -73,11 +74,10 @@ metric_options = {
     "PRs Authored": "prs_authored",
     "PRs Reviewed": "prs_reviewed",
     "Review Comments": "review_comments",
-    "Bug Fixes": "bug_fixes",
     "Large PRs (L+XL)": "large_prs",
     "Areas Touched": "areas_touched",
-    "Net Lines (dampened)": "net_lines",
-    "Feature PRs": "feature_prs",
+    "Net Lines": "net_lines",
+    "Avg Review Turnaround (hrs)": "avg_review_turnaround_hours",
 }
 
 selected_label = st.selectbox("Select metric", list(metric_options.keys()))
@@ -98,14 +98,12 @@ with st.expander("Full Stats Table"):
     for eng, s in ranked:
         all_rows.append({
             "Engineer": eng,
-            "VOR": s["vor"],
+            "Impact (VOR)": s["vor"],
             "Type": s["type"],
             "PRs Authored": s["prs_authored"],
             "PRs Reviewed": s["prs_reviewed"],
             "Review Comments": s["review_comments"],
             "Avg Review Turnaround (hrs)": s["avg_review_turnaround_hours"] or "—",
-            "Bug Fixes": s["bug_fixes"],
-            "Feature PRs": s["feature_prs"],
             "Large PRs": s["large_prs"],
             "Areas Touched": s["areas_touched"],
             "Net Lines": s["net_lines"],
@@ -128,9 +126,11 @@ VOR measures how much an engineer exceeds the typical (median) contributor acros
 | PRs Reviewed | 0.20 | Team multiplier — unblocking others |
 | Review Comments | 0.10 | Depth of review engagement |
 | Areas Touched | 0.15 | Cross-cutting breadth of contribution |
-| Bug Fixes | 0.10 | Reliability and maintenance work |
+| Review Turnaround (inv) | 0.10 | Speed of first review — faster = higher score |
 | Net Lines (dampened) | 0.10 | Scale of change, log-dampened to avoid rewarding bloat |
 | Large PRs (L+XL) | 0.15 | Willingness to tackle substantial changes |
+
+*Note: Bug fixes and feature PRs were initially planned as metrics but dropped because PostHog uses very few PR labels (<10% of PRs), making label-based signals unreliable. Review turnaround replaced bug fixes as a more data-rich measure of team enablement.*
 
 **Log dampening** on net lines: `sign(x) * log(1 + |x|)` — prevents an engineer who adds 50K lines from dominating the score. The signal is "do they make meaningful-sized changes?" not "who wrote the most code."
 
@@ -142,8 +142,8 @@ VOR measures how much an engineer exceeds the typical (median) contributor acros
 
 ### Ceiling Raiser vs. Floor Raiser
 
-- **Ceiling Raiser** (top 20th percentile): High z-scores in large PRs, feature PRs, net lines, and areas touched. These engineers push the product forward with ambitious, broad contributions.
-- **Floor Raiser** (top 20th percentile): High z-scores in PRs reviewed, review comments, and bug fixes. These engineers keep quality high and unblock the team.
+- **Ceiling Raiser** (top 20th percentile): High z-scores in large PRs, net lines, and areas touched. These engineers push the product forward with ambitious, broad contributions.
+- **Floor Raiser** (top 20th percentile): High z-scores in PRs reviewed, review comments, and review turnaround speed. These engineers keep quality high and unblock the team.
 - Engineers can be both, neither, or one.
 
 ### Qualification

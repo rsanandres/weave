@@ -13,13 +13,14 @@ load_dotenv()
 
 MIN_PRS = 3
 
-# VOR weights
+# VOR weights — bug_fixes/feature_prs dropped because PostHog barely labels PRs.
+# Replaced with avg_review_turnaround (inverted: lower = better = higher z-score).
 WEIGHTS = {
     "prs_authored": 0.20,
     "prs_reviewed": 0.20,
     "review_comments": 0.10,
     "areas_touched": 0.15,
-    "bug_fixes": 0.10,
+    "review_turnaround_inv": 0.10,
     "net_lines_dampened": 0.10,
     "large_prs": 0.15,
 }
@@ -145,6 +146,20 @@ def compute_vor(stats):
     for m in metrics:
         if m == "net_lines_dampened":
             raw[m] = [log_dampen(stats[e]["net_lines"]) for e in engineers]
+        elif m == "review_turnaround_inv":
+            # Invert turnaround: lower hours = better. Use negative so higher z = faster.
+            # Engineers with no reviews get median (0 z-score) via fallback.
+            median_ta = statistics.median([
+                stats[e]["avg_review_turnaround_hours"]
+                for e in engineers
+                if stats[e]["avg_review_turnaround_hours"] is not None
+            ]) if any(stats[e]["avg_review_turnaround_hours"] is not None for e in engineers) else 0
+            raw[m] = [
+                -(stats[e]["avg_review_turnaround_hours"])
+                if stats[e]["avg_review_turnaround_hours"] is not None
+                else -median_ta
+                for e in engineers
+            ]
         else:
             raw[m] = [stats[e][m] for e in engineers]
 
@@ -174,9 +189,10 @@ def classify_ceiling_floor(stats):
     """Classify engineers as ceiling raisers, floor raisers, or both."""
     engineers = list(stats.keys())
 
-    # Ceiling composite: large_prs, feature_prs, net_lines_dampened, areas_touched
-    ceiling_keys = ["large_prs", "feature_prs", "net_lines_dampened", "areas_touched"]
-    floor_keys = ["prs_reviewed", "review_comments", "bug_fixes"]
+    # Ceiling composite: ambitious, broad contributions
+    ceiling_keys = ["large_prs", "net_lines_dampened", "areas_touched"]
+    # Floor composite: team enablement and review quality
+    floor_keys = ["prs_reviewed", "review_comments", "review_turnaround_inv"]
 
     for eng in engineers:
         z = stats[eng]["z_scores"]
@@ -224,8 +240,8 @@ def generate_llm_summary(stats, cache_path="data/llm_summary.txt"):
     ranked = sorted(stats.items(), key=lambda x: x[1]["vor"], reverse=True)[:5]
     profile = "\n".join(
         f"- {eng}: VOR={s['vor']}, PRs={s['prs_authored']}, Reviews={s['prs_reviewed']}, "
-        f"Bug Fixes={s['bug_fixes']}, Areas={s['areas_touched']}, Large PRs={s['large_prs']}, "
-        f"Type={s['type']}"
+        f"Areas={s['areas_touched']}, Large PRs={s['large_prs']}, "
+        f"Avg Review Turnaround={s['avg_review_turnaround_hours']}h, Type={s['type']}"
         for eng, s in ranked
     )
 
@@ -241,7 +257,9 @@ def generate_llm_summary(stats, cache_path="data/llm_summary.txt"):
                     f"Here are the top 5 engineers by Value Over Replacement (VOR) score:\n\n"
                     f"{profile}\n\n"
                     f"Write 2-3 sentences summarizing who stands out and why. Be specific about "
-                    f"what makes each person impactful. Don't use superlatives — use the numbers."
+                    f"what makes each person impactful. Don't use superlatives — use the numbers.\n\n"
+                    f'Example tone: "X authored 47 PRs across 8 areas, suggesting a generalist role, '
+                    f"while Y's 92 reviews and 4-hour median turnaround made them the team's primary unlocker.\""
                 ),
             }],
         )
