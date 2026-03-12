@@ -151,41 +151,33 @@ with col1:
 
     st.altair_chart(scatter + labels, use_container_width=True)
 
-# --- VOR Breakdown Chart ---
+# --- Impact Score Bar Chart ---
 with col2:
-    st.subheader("Score Breakdown")
-    breakdown_n = min(top_n, 5)
+    st.subheader("Impact Scores")
+    breakdown_n = min(top_n, 10)
     top_engineers = [e for e, _ in ranked[:breakdown_n]]
 
-    breakdown_rows = []
-    for eng in top_engineers:
-        z = stats[eng]["z_scores"]
-        for metric_key, weight in WEIGHTS.items():
-            contribution = z.get(metric_key, 0) * weight
-            breakdown_rows.append({
-                "Engineer": eng,
-                "Component": WEIGHT_LABELS.get(metric_key, metric_key),
-                "Contribution": round(contribution, 3),
-            })
+    impact_df = pd.DataFrame({
+        "Engineer": top_engineers,
+        "Impact Score": [stats[e]["impact_score"] for e in top_engineers],
+    })
 
-    bd_df = pd.DataFrame(breakdown_rows)
-
-    breakdown_chart = (
-        alt.Chart(bd_df)
+    impact_chart = (
+        alt.Chart(impact_df)
         .mark_bar()
         .encode(
             y=alt.Y("Engineer:N", sort=top_engineers, title=None),
-            x=alt.X("Contribution:Q", title="VOR Contribution", stack="zero"),
+            x=alt.X("Impact Score:Q", scale=alt.Scale(domain=[0, 100])),
             color=alt.Color(
-                "Component:N",
-                scale=alt.Scale(scheme="tableau10"),
-                legend=alt.Legend(orient="bottom", columns=4, title=None),
+                "Impact Score:Q",
+                scale=alt.Scale(scheme="redyellowgreen", domain=[30, 100]),
+                legend=None,
             ),
-            tooltip=["Engineer", "Component", "Contribution"],
+            tooltip=["Engineer", "Impact Score"],
         )
         .properties(height=380)
     )
-    st.altair_chart(breakdown_chart, use_container_width=True)
+    st.altair_chart(impact_chart, use_container_width=True)
 
 # ============================================================
 # Metric Explorer — in expander
