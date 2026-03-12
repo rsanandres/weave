@@ -15,8 +15,11 @@ from analyze import (
 st.set_page_config(page_title="PostHog Engineering Impact", layout="wide")
 
 
-@st.cache_data
-def get_data():
+_CACHE_VERSION = 2  # bump to bust Streamlit Cloud cache
+
+
+@st.cache_data(ttl=3600)
+def get_data(_version=_CACHE_VERSION):
     data, stats = load_and_analyze()
     return data, stats
 
