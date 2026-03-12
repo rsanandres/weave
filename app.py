@@ -15,11 +15,11 @@ from analyze import (
 st.set_page_config(page_title="PostHog Engineering Impact", layout="wide")
 
 
-_CACHE_VERSION = 3  # bump to bust Streamlit Cloud cache
+CACHE_VERSION = "v3"
 
 
 @st.cache_data(ttl=3600)
-def get_data(_version=_CACHE_VERSION):
+def get_data(cache_version=CACHE_VERSION):
     data, stats = load_and_analyze()
     return data, stats
 
