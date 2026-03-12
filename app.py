@@ -161,13 +161,14 @@ with col2:
     for eng in top_engineers:
         z = stats[eng]["z_scores"]
         impact = stats[eng]["impact_score"]
-        for metric_key, weight in WEIGHTS.items():
-            # Scale contribution proportionally to impact score
-            raw_contrib = z.get(metric_key, 0) * weight
+        # Get positive contributions, allocate impact score proportionally
+        contribs = {k: max(z.get(k, 0) * w, 0) for k, w in WEIGHTS.items()}
+        total = sum(contribs.values()) or 1
+        for metric_key in WEIGHTS:
             breakdown_rows.append({
                 "Engineer": eng,
                 "Component": WEIGHT_LABELS.get(metric_key, metric_key),
-                "Contribution": round(max(raw_contrib, 0) * (impact / max(stats[eng]["vor"], 0.01)), 1),
+                "Contribution": round(contribs[metric_key] / total * impact, 1),
             })
 
     bd_df = pd.DataFrame(breakdown_rows)
