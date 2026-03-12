@@ -58,55 +58,52 @@ def _type_icons(type_str):
 
 
 # ============================================================
-# VOR Leaderboard — slim 3-column table
-# ============================================================
-st.subheader("VOR Leaderboard")
-st.caption(
-    "Value Over Replacement — how much each engineer exceeds the median contributor. "
-    "0 = median, positive = above.  "
-    "▲ = Ceiling Raiser (top 20% in output & breadth) · ▼ = Floor Raiser (top 20% in reviews & speed)"
-)
-
-lb_rows = []
-for rank, (eng, s) in enumerate(ranked[:top_n], 1):
-    icon = _type_icons(s["type"])
-    label = f"{eng} {icon}" if icon else eng
-    lb_rows.append({
-        "Rank": rank,
-        "Engineer": label,
-        "Impact (VOR)": s["vor"],
-    })
-
-lb_df = pd.DataFrame(lb_rows)
-
-st.dataframe(
-    lb_df,
-    use_container_width=True,
-    hide_index=True,
-    height=min(400, 35 * top_n + 38),
-    column_config={
-        "Rank": st.column_config.NumberColumn(
-            "Rank", help="Ranked by Impact (VOR) score"
-        ),
-        "Engineer": st.column_config.TextColumn(
-            "Engineer",
-            help="GitHub username. ▲ = ceiling raiser (pushes product forward). ▼ = floor raiser (maintains quality).",
-        ),
-        "Impact (VOR)": st.column_config.ProgressColumn(
-            "Impact (VOR)",
-            help="Weighted z-score across authoring, reviewing, breadth, and complexity. 0 = median contributor.",
-            format="%.2f",
-            min_value=-2,
-            max_value=3,
-        ),
-    },
-)
-
-# ============================================================
-# Charts — side by side
+# Leaderboard + Charts — three columns
 # ============================================================
 
-col1, col2 = st.columns(2)
+col_lb, col1, col2 = st.columns([1, 1, 1])
+
+with col_lb:
+    st.subheader("VOR Leaderboard")
+    st.caption(
+        "0 = median, positive = above. "
+        "▲ Ceiling Raiser · ▼ Floor Raiser"
+    )
+
+    lb_rows = []
+    for rank, (eng, s) in enumerate(ranked[:top_n], 1):
+        icon = _type_icons(s["type"])
+        label = f"{eng} {icon}" if icon else eng
+        lb_rows.append({
+            "Rank": rank,
+            "Engineer": label,
+            "Impact (VOR)": s["vor"],
+        })
+
+    lb_df = pd.DataFrame(lb_rows)
+
+    st.dataframe(
+        lb_df,
+        use_container_width=True,
+        hide_index=True,
+        height=min(400, 35 * top_n + 38),
+        column_config={
+            "Rank": st.column_config.NumberColumn(
+                "Rank", help="Ranked by Impact (VOR) score"
+            ),
+            "Engineer": st.column_config.TextColumn(
+                "Engineer",
+                help="GitHub username. ▲ = ceiling raiser (pushes product forward). ▼ = floor raiser (maintains quality).",
+            ),
+            "Impact (VOR)": st.column_config.ProgressColumn(
+                "Impact (VOR)",
+                help="Weighted z-score across authoring, reviewing, breadth, and complexity. 0 = median contributor.",
+                format="%.2f",
+                min_value=-2,
+                max_value=3,
+            ),
+        },
+    )
 
 # --- Authoring vs Reviewing Scatter ---
 with col1:
