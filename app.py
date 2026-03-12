@@ -279,7 +279,7 @@ The Impact Score measures how much an engineer exceeds the typical (median) cont
 - **Label-dependent metrics removed**: PostHog labels <10% of PRs, so bug fix and feature PR counts were excluded from scoring as unreliable signals.
 - **90-day window**: Does not account for vacations, on-call rotations, or parental leave.
 - **File truncation**: GitHub API returns max 50 files per PR. Large PRs with 100+ files may have undercounted area coverage.
-- **Review turnaround**: Measured from PR creation to first review, not from when review was requested. Displayed for context but not included in Impact Score.
+- **Review turnaround**: Measured from PR creation to first review, not from when review was requested. Displayed in Full Stats Table for context but not included in Impact Score. Cycle time (creation to merge) is used instead.
 
 ### Qualification
 Engineers must have authored ≥3 merged PRs in the period to qualify. Bot accounts are excluded.
